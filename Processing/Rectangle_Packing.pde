@@ -1,6 +1,6 @@
 import java.util.*; //<>// //<>// //<>//
-boolean debugging = true;
-int padding = 0;
+boolean debugging = false;
+int padding = 20;
 ArrayList<PImage> images;
 ArrayList<rect> rectangles;
 ArrayList<layer> layers;
@@ -20,9 +20,10 @@ void setup() {
   println("Loading Images.");
   images = new ArrayList<PImage>();
   for (String s : imageNames) {
-    if ((s.contains(".png") || s.contains(".jpg")) && images.size() < 3000) {
+    if ((s.contains(".png") || s.contains(".jpg") || s.contains(".jpeg")) && images.size() < 3000) {
       images.add(loadImage(path+"/"+s));
     }
+    println("Loaded: " + images.size());
   }
 
   images.sort(Collections.reverseOrder(Comparator.comparingInt(img -> img.height)));
@@ -30,10 +31,10 @@ void setup() {
   image_width = 0;
   image_height = 0;
 
+  x_limit = 1_000_000;
   TestRun();
   rectangles = new ArrayList<rect>();
   layers = new ArrayList<layer>();
-  println(image_width, image_height);
   DrawSurface = createGraphics(image_width, image_height);
 }
 
@@ -41,9 +42,8 @@ void TestRun() {
   ArrayList<lmp> leftMostPoints = new ArrayList<lmp>();
   int x;
   int curr_layer;
-  int x_limit = -1;
   
-  int best_minimum_width = 0;
+  int best_minimum_width = 0, best_minimum_height = 0;
   int minimum_area = -1;
   ArrayList<Integer> previous_widths = new ArrayList<Integer>();
   int over_minimum = 0;
@@ -63,11 +63,9 @@ void TestRun() {
       //check if point can be placed on any LeftMostPoints
       if (leftMostPoints.size() > 0) {
         for (lmp l : leftMostPoints) {
-          //println("l.y = " + l.y + ", img.height = " + img.height + ", sum = " + (l.y + img.height) + ", layer_height = " + layers.get(l.layer).layer_height);
           if ((l.y - layers.get(l.layer).layer_y) + img.height <= layers.get(l.layer).layer_height && l.x + img.width <= x && !isOverlapping(l.x, l.y, img)) {
             rectangles.add(new rect(l.x-padding, l.y-padding, img.width+padding, img.height+padding));
 
-            //DrawSurface.image(img, l.x, l.y);
             if (image_width <= l.x+img.width) image_width = l.x+img.width;
             if (image_height <= l.y+img.height) image_height = l.y+img.height;
 
@@ -106,13 +104,12 @@ void TestRun() {
           }
         }
 
-        if (x+img.width > x_limit && x_limit != -1) {
+        if (x+img.width > x_limit) {
           leftMostPoints.add(new lmp(x+padding, layers.get(curr_layer).layer_y, curr_layer));
           layers.add(new layer(layers.get(curr_layer).layer_y+layers.get(curr_layer).layer_height, img.height+padding));
           curr_layer += 1;
           x = 0;
           
-          //DrawSurface.image(img, x, layers.get(curr_layer).layer_y);
           if (image_width <= x+img.width) image_width = x+img.width;
           if (image_height <= layers.get(curr_layer).layer_y+img.height) image_height = layers.get(curr_layer).layer_y+img.height;
           
@@ -120,15 +117,15 @@ void TestRun() {
           x += img.width+padding;
         } else {
           
-          //DrawSurface.image(img, x, layers.get(curr_layer).layer_y);
           if (image_width <= x+img.width) image_width = x+img.width;
           if (image_height <= layers.get(curr_layer).layer_y+img.height) image_height = layers.get(curr_layer).layer_y+img.height;
           
           rectangles.add(new rect(x-padding, layers.get(curr_layer).layer_y-padding, img.width+padding, img.height+padding));
           
           x += img.width+padding;
-          if (x > x_limit && x_limit != -1) {
+          if (x > x_limit) {
             layers.add(new layer(layers.get(curr_layer).layer_y+layers.get(curr_layer).layer_height, img.height+padding));
+            println("here2");
             curr_layer += 1;
             x = 0;
           }
@@ -139,19 +136,23 @@ void TestRun() {
     if (previous_widths.size() == 0){
       previous_widths.add(image_width);
       minimum_area = image_width*image_height;
+      best_minimum_width = image_width;
+      best_minimum_height = image_height;
       x_limit = image_width/2;
       over_minimum = 0;
     } else {
-      int new_area = image_height * image_width;
-      if (new_area < minimum_area) {
+      int new_ratio = max(image_height,image_width) / min(image_height,image_width);
+      if (new_ratio < minimum_area) {
         previous_widths.add(image_width);
-        minimum_area = new_area;
+        minimum_area = new_ratio;
         best_minimum_width = image_width;
+        best_minimum_height = image_height;
         x_limit = image_width/2;
         over_minimum = 0;
       } else {
         if (over_minimum == 2){
           image_width = best_minimum_width;
+          image_height = best_minimum_height;
           break;
         }
         over_minimum ++;
@@ -161,7 +162,6 @@ void TestRun() {
     }
     image_width = 0;
     image_height = 0;
-    
   }
 }
 
@@ -171,9 +171,8 @@ void draw() {
   ArrayList<lmp> leftMostPoints = new ArrayList<lmp>();
   int x = 0;
   int curr_layer = 0;
-  int x_limit = DrawSurface.width;
+  x_limit = DrawSurface.width;
   for (PImage img : images) {
-    //println("Working on image: " + img);
     //sort leftMostPoints
     leftMostPoints.sort(Comparator.comparingInt(lmp_x -> lmp_x.x));
 
@@ -242,13 +241,14 @@ void draw() {
 
   //Debugging
   if (debugging) {
-    DrawSurface.fill(255, 70, 150);
+    DrawSurface.stroke(255, 70, 150);
     DrawSurface.strokeWeight(10);
     for (lmp l : leftMostPoints) {
-      DrawSurface.text(l.layer, l.x+2, l.y+8);
+      //DrawSurface.text(l.layer, l.x+2, l.y+8);
+      DrawSurface.point(l.x, l.y);
     }
 
-    DrawSurface.strokeWeight(2);
+    DrawSurface.strokeWeight(1);
     DrawSurface.stroke(255, 70, 150);
     DrawSurface.noFill();
     for (rect r : rectangles) {
